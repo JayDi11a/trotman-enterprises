@@ -113,6 +113,8 @@ graph TB
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
+| **Open WebUI** | http://192.168.1.130:30080 | Create account on first access |
+| **Trotman Chat (CLI)** | `trotman-chat` | Interactive CLI tool |
 | **Langfuse UI** | http://192.168.1.130:30300 | Create account on first access |
 | **Kagent UI** | `kubectl -n kagent port-forward svc/kagent-ui 8080:8080` | N/A |
 | **vLLM API** | http://192.168.1.130:8000/v1 | OpenAI-compatible |
@@ -122,6 +124,22 @@ graph TB
 
 ```
 trotman-enterprises/
+├── trotman-chat/           # Claude Code-like CLI (interactive)
+│   ├── trotman-chat.py     # Main CLI tool with tool execution
+│   ├── install.sh          # Installation script
+│   ├── README.md           # Full documentation
+│   └── QUICKSTART.md       # Quick start guide
+├── open-webui/             # ChatGPT-style web interface
+│   ├── deployment.yaml     # Kubernetes deployment
+│   ├── deploy.sh           # Deployment script
+│   └── README.md           # Full documentation
+├── examples/               # LangChain chat examples
+│   ├── chat-cli.py         # Interactive chat
+│   ├── chat-simple.py      # Simple queries
+│   ├── chat-streaming.py   # Streaming responses
+│   ├── chat-langfuse.py    # With observability
+│   ├── requirements.txt    # Python dependencies
+│   └── README.md           # Usage guide
 ├── kagent/                 # Agent orchestration (Kagent v0.9.0)
 │   ├── model-configs/      # ModelConfig YAMLs (3 providers)
 │   ├── values.yaml         # Helm values
@@ -178,7 +196,55 @@ trotman-enterprises/
 
 ## Quick Start
 
-### 1. Access Langfuse
+### 1. Chat with Your Local LLMs (Claude Code-like CLI)
+
+**Trotman Chat** - Interactive CLI with tool execution:
+
+```bash
+# Install (one-time)
+cd trotman-chat && ./install.sh
+
+# Start chatting (uses vLLM by default)
+trotman-chat
+
+# Example session:
+You: List all pods in the kagent namespace
+Assistant: [Executes kubectl] Here are the pods...
+
+You: Show me cluster information
+Assistant: [Shows nodes, namespaces, resources]
+
+You: /exit
+```
+
+See [trotman-chat/README.md](trotman-chat/README.md) for full documentation.
+
+### 2. Deploy Open WebUI (ChatGPT-style Web Interface)
+
+**Open WebUI** - Beautiful web interface for your local models:
+
+```bash
+# Deploy to cluster (2 minutes)
+cd open-webui && ./deploy.sh
+
+# Access in browser
+open http://192.168.1.130:30080
+```
+
+**First time setup:**
+1. Create admin account (first user becomes admin)
+2. Select model: `phi3` (Ollama) or `microsoft/Phi-3-mini-4k-instruct` (vLLM)
+3. Start chatting!
+
+**Features:**
+- ChatGPT-style interface
+- Document upload (RAG)
+- Chat history
+- Multi-user support
+
+See [open-webui/README.md](open-webui/README.md) for full documentation.
+
+### 3. Access Langfuse (Observability)
 ```bash
 # Open in browser
 open http://192.168.1.130:30300
@@ -186,7 +252,7 @@ open http://192.168.1.130:30300
 # Create admin account on first visit
 ```
 
-### 2. Test vLLM Inference
+### 4. Test vLLM Inference (API)
 ```bash
 curl http://192.168.1.130:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -197,12 +263,12 @@ curl http://192.168.1.130:8000/v1/chat/completions \
   }'
 ```
 
-### 3. View Kagent Agents
+### 5. View Kagent Agents
 ```bash
 kubectl get agents -n kagent
 ```
 
-### 4. Test Sandboxed Execution
+### 6. Test Sandboxed Execution
 ```bash
 kubectl run sandbox-test --image=nginx --restart=Never \
   --overrides='{"spec": {"runtimeClassName": "gvisor"}}'
