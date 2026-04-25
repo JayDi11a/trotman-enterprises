@@ -1,0 +1,58 @@
+# Secrets and credentials
+*.key
+*.pem
+*.crt
+*-secret.yaml
+secrets/
+.env
+.env.*
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# Model files (too large for git)
+*.gguf
+*.bin
+*.safetensors
+models/
+
+# Backups
+*.backup
+*.sql
+*.dump
+backups/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv
+
+# Journal (personal notes, not committed)
+journal/
