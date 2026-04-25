@@ -148,8 +148,13 @@ trotman-enterprises/
 │   └── README.md
 ├── cert-manager/           # TLS certificate automation
 │   └── README.md
+├── gpu/                    # GPU acceleration (optional)
+│   └── README.md           # Complete GPU installation guide
 ├── diagrams/               # Architecture diagrams
 │   └── lab-architecture.md
+├── journal/                # Session journals (not committed)
+│   ├── manifest.md         # Journal configuration
+│   └── 2026-04-25.md       # Installation journal
 ├── ARCHITECTURE.md         # Detailed system design
 └── README.md               # This file
 ```
@@ -250,11 +255,22 @@ kubectl exec sandbox-test -- dmesg | grep gVisor
 - Framework lock-in → Kagent supports any provider
 - Paid observability SaaS → Langfuse open source
 
+## GPU Acceleration (Optional)
+
+Add GPU compute for 5-10x inference performance improvement:
+
+- **Recommended**: NVIDIA Tesla P40 (24GB) - $200-400 used
+- **Performance**: 40-60 tok/s (vs 8 tok/s CPU)
+- **Cost**: $9/month electricity (8hr/day usage)
+- **Installation time**: ~2 hours
+
+See **[GPU Installation Guide](gpu/README.md)** for detailed setup instructions.
+
 ## Future Enhancements
 
+- [ ] Add GPU acceleration (Tesla P40 or RTX A4000) - [See GPU Guide](gpu/README.md)
 - [ ] Add Arize Phoenix for model monitoring
 - [ ] Deploy Ray Serve for distributed inference
-- [ ] Implement GPU passthrough for 2x NVIDIA Tesla P40
 - [ ] Add Prometheus + Grafana for infrastructure metrics
 - [ ] Deploy MinIO for S3-compatible object storage
 - [ ] Implement GitOps with ArgoCD
