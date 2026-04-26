@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama-70b
+  namespace: vllm-models
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-llama-70b
+  template:
+    metadata:
+      labels:
+        app: vllm-llama-70b
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8s-control
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        command:
+          - python3
+          - -m
+          - vllm.entrypoints.openai.api_server
+          - --model
+          - meta-llama/Llama-3.1-70B-Instruct
+          - --host
+          - "0.0.0.0"
+          - --port
+          - "8000"
+          - --download-dir
+          - /models/llama-3.1-70b
+          - --dtype
+          - auto
+          - --max-model-len
+          - "8192"
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          requests:
+            memory: "48Gi"
+            cpu: "8"
+          limits:
+            memory: "64Gi"
+            cpu: "16"
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        env:
+        - name: HF_HOME
+          value: /models/huggingface
+        - name: TRANSFORMERS_CACHE
+          value: /models/huggingface
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama-70b
+  namespace: vllm-models
+spec:
+  type: NodePort
+  selector:
+    app: vllm-llama-70b
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30700
+    name: http
