@@ -47,6 +47,17 @@ model_list:
       supports_vision: false
       description: "Qwen2.5 32B - High capability function calling"
 
+  - model_name: functionary-small
+    litellm_params:
+      model: openai/functionary-small
+      api_base: http://192.168.1.130:30706/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Functionary Small 3.2 - Specialized function calling model"
+
   # ============================================
   # LARGE MODELS - On-demand (load as needed)
   # ============================================
@@ -56,7 +67,7 @@ model_list:
   - model_name: llama-3.1-70b
     litellm_params:
       model: openai/llama-3.1-70b
-      api_base: http://192.168.1.130:30700/v1
+      api_base: http://192.168.1.131:30700/v1
       api_key: dummy
     model_info:
       mode: "completion"
@@ -67,7 +78,7 @@ model_list:
   - model_name: qwen2.5-72b
     litellm_params:
       model: openai/qwen2.5-72b
-      api_base: http://192.168.1.130:30701/v1
+      api_base: http://192.168.1.131:30701/v1
       api_key: dummy
     model_info:
       mode: "completion"
@@ -78,7 +89,7 @@ model_list:
   - model_name: mixtral-8x7b
     litellm_params:
       model: openai/mixtral-8x7b
-      api_base: http://192.168.1.130:30707/v1
+      api_base: http://192.168.1.131:30707/v1
       api_key: dummy
     model_info:
       mode: "completion"
@@ -89,7 +100,7 @@ model_list:
   - model_name: mixtral-8x22b
     litellm_params:
       model: openai/mixtral-8x22b
-      api_base: http://192.168.1.130:30708/v1
+      api_base: http://192.168.1.131:30708/v1
       api_key: dummy
     model_info:
       mode: "completion"
@@ -178,7 +189,7 @@ model_list:
 router_settings:
   routing_strategy: simple-shuffle
   model_group_alias:
-    function-calling-small: [hermes-2-pro-8b, qwen2.5-14b, granite-3.0-8b]
+    function-calling-small: [hermes-2-pro-8b, qwen2.5-14b, granite-3.0-8b, functionary-small]
     function-calling-medium: [qwen2.5-32b, mixtral-8x7b]
     function-calling-large: [llama-3.1-70b, qwen2.5-72b, mixtral-8x22b]
     cloud-premium: [claude-3-5-sonnet, gpt-4o]
