@@ -30,19 +30,19 @@ Detailed technical architecture of the Trotman Enterprises ML Lab.
 ┌─────────────────────────────────────────────────────────────────┐
 │ k8s-control VM (on 3650 M4)                                     │
 │ ├─ OS: AlmaLinux 9.7 (RHEL-compatible)                         │
-│ ├─ Resources: 64GB RAM, 16 vCPU, 200GB disk                    │
-│ ├─ Role: k3s control plane + workloads                         │
+│ ├─ Resources: 62GB RAM, 16 vCPU, 1TB /models disk              │
+│ ├─ Role: Small/medium ML models + LiteLLM orchestration        │
 │ ├─ IP: 192.168.1.130                                           │
-│ └─ Services: vLLM, Kagent, Langfuse, KServe controllers        │
+│ └─ Services: 5 llama.cpp models, LiteLLM proxy, k3s (minimal) │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
 │ k8s-worker VM (on 3550 M4)                                      │
 │ ├─ OS: AlmaLinux 9.7 (RHEL-compatible)                         │
-│ ├─ Resources: 64GB RAM, 16 vCPU, 200GB disk                    │
-│ ├─ Role: k3s worker node                                       │
+│ ├─ Resources: 256GB RAM, 16 vCPU, 1TB /models disk             │
+│ ├─ Role: Large ML model inference (70B+ parameter models)      │
 │ ├─ IP: 192.168.1.131                                           │
-│ └─ Services: Ollama, agent workloads, model replicas           │
+│ └─ Services: 4 llama.cpp large models (Llama 70B, Qwen 72B...) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,13 +80,94 @@ Service Network: 10.43.0.0/16 (k3s default)
 
 ### Service Exposure
 
-| Service | Type | Port Mapping | Access |
-|---------|------|--------------|--------|
-| Langfuse Web | NodePort | 3000:30300/TCP | http://192.168.1.130:30300 |
-| vLLM API | Host Network | 8000/TCP | http://192.168.1.130:8000 |
-| Ollama API | ClusterIP | 11434/TCP | Internal only |
-| Kagent UI | ClusterIP | 8080/TCP | kubectl port-forward |
-| Kagent Controller | ClusterIP | 8083/TCP | kubectl port-forward |
+| Service | Type | Port | Access |
+|---------|------|------|--------|
+| **LiteLLM Proxy (Unified API)** | systemd | 4000/TCP | http://192.168.1.130:4000 |
+| Hermes 2 Pro 8B | systemd | 30704/TCP | http://192.168.1.130:30704 |
+| Qwen 2.5 14B | systemd | 30705/TCP | http://192.168.1.130:30705 |
+| Granite 3.0 8B | systemd | 30709/TCP | http://192.168.1.130:30709 |
+| Functionary Small | systemd | 30706/TCP | http://192.168.1.130:30706 |
+| Qwen 2.5 32B | systemd | 30703/TCP | http://192.168.1.130:30703 |
+| Llama 3.1 70B | systemd | 30700/TCP | http://192.168.1.131:30700 |
+| Qwen 2.5 72B | systemd | 30701/TCP | http://192.168.1.131:30701 |
+| Mixtral 8x7B | systemd | 30707/TCP | http://192.168.1.131:30707 |
+| Mixtral 8x22B | systemd | 30708/TCP | http://192.168.1.131:30708 |
+| Langfuse Web | NodePort | 30300/TCP | http://192.168.1.130:30300 |
+
+## ML Model Serving Architecture
+
+### Distributed llama.cpp + LiteLLM Setup
+
+The ML inference platform uses a distributed architecture with llama.cpp-python for model serving and LiteLLM as a unified API gateway.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ User Applications                                                    │
+└────────────────────────┬─────────────────────────────────────────────┘
+                         │
+                         ▼
+         ┌───────────────────────────────────┐
+         │ LiteLLM Proxy (Control Node)      │
+         │ http://192.168.1.130:4000/v1      │
+         │ OpenAI-compatible API             │
+         └───────────┬───────────────────────┘
+                     │
+         ┌───────────┴────────────┬─────────────────────┐
+         │                        │                     │
+         ▼                        ▼                     ▼
+┌─────────────────┐    ┌──────────────────┐   ┌────────────────┐
+│ Control Node    │    │ Worker Node      │   │ Cloud APIs     │
+│ Small Models    │    │ Large Models     │   │                │
+├─────────────────┤    ├──────────────────┤   ├────────────────┤
+│ Hermes 8B       │    │ Llama 70B        │   │ Claude Sonnet  │
+│ Qwen 14B        │    │ Qwen 72B         │   │ Claude Haiku   │
+│ Granite 8B      │    │ Mixtral 8x7B     │   │ GPT-4o         │
+│ Functionary     │    │ Mixtral 8x22B    │   │ GPT-4o Mini    │
+│ Qwen 32B        │    │                  │   │ Gemini 2.0     │
+│                 │    │                  │   │                │
+│ ~42GB RAM used  │    │ ~196GB RAM used  │   │                │
+└─────────────────┘    └──────────────────┘   └────────────────┘
+```
+
+### Model Distribution Strategy
+
+**Control Node (192.168.1.130) - 62GB RAM:**
+- **Purpose**: Fast-response small/medium models + API orchestration
+- **Models**: 5 local models (8B-32B parameter range)
+- **Memory**: ~42GB used, 20GB free
+- **Response time**: <500ms first token for most queries
+
+**Worker Node (192.168.1.131) - 256GB RAM:**
+- **Purpose**: High-quality large model inference
+- **Models**: 4 large models (70B+ parameter range)
+- **Memory**: ~196GB when all loaded, 60GB free
+- **Response time**: 1-3s first token, maximum quality
+
+**Cloud Providers:**
+- **Purpose**: Fallback, vision models, ultra-high quality
+- **Models**: Claude 3.5 (Sonnet/Haiku), GPT-4o, Gemini 2.0
+- **Cost**: Pay-per-token, used selectively
+
+### Technology Stack
+
+**Model Runtime:**
+- **llama.cpp-python**: Python bindings for llama.cpp
+- **GGUF Q4_K_M quantization**: 4-bit quantization, ~40GB for 70B models
+- **Systemd services**: Production deployment, auto-restart on failure
+- **CPU inference**: 8-15 tokens/sec on Xeon E5-2690 processors
+
+**API Gateway:**
+- **LiteLLM**: Unified OpenAI-compatible API for all models
+- **Smart routing**: Route by model capability and size
+- **Load balancing**: Round-robin across endpoints
+- **Failover**: Automatic fallback to cloud if local fails
+
+**Monitoring:**
+- **Live dashboard**: Real-time deployment status
+- **Systemd journald**: Centralized logging
+- **Resource tracking**: Memory, CPU, tokens/sec metrics
+
+See [`docs/DISTRIBUTED_ARCHITECTURE.md`](docs/DISTRIBUTED_ARCHITECTURE.md) for detailed deployment guide.
 
 ## Component Architecture
 

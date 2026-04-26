@@ -1,0 +1,199 @@
+model_list:
+  # ============================================
+  # SMALL MODELS - Persistent (always loaded)
+  # ============================================
+
+  - model_name: hermes-2-pro-8b
+    litellm_params:
+      model: openai/hermes-2-pro-8b
+      api_base: http://192.168.1.130:30704/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Nous Hermes 2 Pro - Optimized for function calling"
+
+  - model_name: qwen2.5-14b
+    litellm_params:
+      model: openai/qwen2.5-14b
+      api_base: http://192.168.1.130:30705/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Qwen2.5 14B - Strong function calling and reasoning"
+
+  - model_name: granite-3.0-8b
+    litellm_params:
+      model: openai/granite-3.0-8b
+      api_base: http://192.168.1.130:30709/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "IBM Granite 3.0 8B - Enterprise-grade instruction following"
+
+  - model_name: qwen2.5-32b
+    litellm_params:
+      model: openai/qwen2.5-32b
+      api_base: http://192.168.1.130:30703/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Qwen2.5 32B - High capability function calling"
+
+  # ============================================
+  # LARGE MODELS - On-demand (load as needed)
+  # ============================================
+  # Note: These will be managed by LiteLLM with lazy loading
+  # Models only load into memory when first requested
+
+  - model_name: llama-3.1-70b
+    litellm_params:
+      model: openai/llama-3.1-70b
+      api_base: http://192.168.1.130:30700/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Meta Llama 3.1 70B - Top-tier reasoning and function calling"
+
+  - model_name: qwen2.5-72b
+    litellm_params:
+      model: openai/qwen2.5-72b
+      api_base: http://192.168.1.130:30701/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Qwen2.5 72B - State-of-the-art open model"
+
+  - model_name: mixtral-8x7b
+    litellm_params:
+      model: openai/mixtral-8x7b
+      api_base: http://192.168.1.130:30707/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Mixtral 8x7B - MoE architecture, efficient inference"
+
+  - model_name: mixtral-8x22b
+    litellm_params:
+      model: openai/mixtral-8x22b
+      api_base: http://192.168.1.130:30708/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Mixtral 8x22B - Largest MoE model, exceptional performance"
+
+  # Functionary models (repos to be located)
+  # - model_name: functionary-7b
+  #   litellm_params:
+  #     model: openai/functionary-7b
+  #     api_base: http://192.168.1.130:30706/v1
+  #     api_key: dummy
+  #   model_info:
+  #     mode: "completion"
+  #     supports_function_calling: true
+  #     supports_vision: false
+  #     description: "Functionary 7B - Specialized function calling"
+
+  # - model_name: functionary-70b
+  #   litellm_params:
+  #     model: openai/functionary-70b
+  #     api_base: http://192.168.1.130:30702/v1
+  #     api_key: dummy
+  #   model_info:
+  #     mode: "completion"
+  #     supports_function_calling: true
+  #     supports_vision: false
+  #     description: "Functionary 70B - Advanced function calling"
+
+  # ============================================
+  # CLOUD MODELS - Always available
+  # ============================================
+
+  - model_name: claude-3-5-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: true
+      description: "Anthropic Claude 3.5 Sonnet - Best overall reasoning"
+
+  - model_name: claude-3-5-haiku
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: true
+      description: "Anthropic Claude 3.5 Haiku - Fast and efficient"
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: true
+      description: "OpenAI GPT-4o - Multimodal flagship"
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: true
+      description: "OpenAI GPT-4o Mini - Cost-effective multimodal"
+
+  - model_name: gemini-2.0-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash-exp
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: true
+      description: "Google Gemini 2.0 Flash - Fast reasoning and vision"
+
+# Router configuration
+router_settings:
+  routing_strategy: simple-shuffle
+  model_group_alias:
+    function-calling-small: [hermes-2-pro-8b, qwen2.5-14b, granite-3.0-8b]
+    function-calling-medium: [qwen2.5-32b, mixtral-8x7b]
+    function-calling-large: [llama-3.1-70b, qwen2.5-72b, mixtral-8x22b]
+    cloud-premium: [claude-3-5-sonnet, gpt-4o]
+    cloud-efficient: [claude-3-5-haiku, gpt-4o-mini, gemini-2.0-flash]
+  num_retries: 2
+  timeout: 600
+  allowed_fails: 3
+  cooldown_time: 60
+
+# General settings
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  json_logs: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL  # Optional: For usage tracking
