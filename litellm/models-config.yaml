@@ -108,6 +108,17 @@ model_list:
       supports_vision: false
       description: "Mixtral 8x22B - Largest MoE model, exceptional performance"
 
+  - model_name: command-r-35b
+    litellm_params:
+      model: openai/command-r-35b
+      api_base: http://192.168.1.131:30702/v1
+      api_key: dummy
+    model_info:
+      mode: "completion"
+      supports_function_calling: true
+      supports_vision: false
+      description: "Cohere Command-R 35B - Optimized for RAG and tool use"
+
   # Functionary models (repos to be located)
   # - model_name: functionary-7b
   #   litellm_params:
@@ -190,7 +201,7 @@ router_settings:
   routing_strategy: simple-shuffle
   model_group_alias:
     function-calling-small: [hermes-2-pro-8b, qwen2.5-14b, granite-3.0-8b, functionary-small]
-    function-calling-medium: [qwen2.5-32b, mixtral-8x7b]
+    function-calling-medium: [qwen2.5-32b, command-r-35b, mixtral-8x7b]
     function-calling-large: [llama-3.1-70b, qwen2.5-72b, mixtral-8x22b]
     cloud-premium: [claude-3-5-sonnet, gpt-4o]
     cloud-efficient: [claude-3-5-haiku, gpt-4o-mini, gemini-2.0-flash]
