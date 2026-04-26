@@ -8,17 +8,17 @@ Detailed technical architecture of the Trotman Enterprises ML Lab.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ IBM System x 3650 M4                                            │
-│ ├─ 2x Intel Xeon E5-2690 (8C/16T @ 2.9GHz) = 16C/32T total    │
-│ ├─ 128GB DDR3 ECC RAM                                          │
+│ IBM System x 3650 M4 (Control Host)                            │
+│ ├─ 2x Intel Xeon E5-2667 v2 (8C/16T @ 3.30GHz) = 16C/32T     │
+│ ├─ 128GB DDR3 ECC RAM (55GB free for VM expansion)            │
 │ ├─ VMware ESXi 8.0.3 (IP: 192.168.1.128)                      │
 │ └─ IMM2 Remote Management (IP: 192.168.1.200)                 │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│ IBM System x 3550 M4                                            │
-│ ├─ 2x Intel Xeon E5-2690 (8C/16T @ 2.9GHz) = 16C/32T total    │
-│ ├─ 336GB DDR3 ECC RAM                                          │
+│ IBM System x 3550 M4 (Worker Host)                             │
+│ ├─ 2x Intel Xeon E5-2667 v2 (8C/16T @ 3.30GHz) = 16C/32T     │
+│ ├─ 335GB DDR3 ECC RAM (277GB free, worker VM expanded)        │
 │ ├─ VMware ESXi 8.0.3 (IP: 192.168.1.198)                      │
 │ └─ IMM2 Remote Management (IP: 192.168.1.199)                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -171,91 +171,7 @@ See [`docs/DISTRIBUTED_ARCHITECTURE.md`](docs/DISTRIBUTED_ARCHITECTURE.md) for d
 
 ## Component Architecture
 
-### 1. Agent Orchestration (Kagent)
-
-```mermaid
-graph TB
-    subgraph "Kagent Namespace"
-        UI["kagent-ui<br/>Web Interface"]
-        CTRL["kagent-controller<br/>K8s Operator"]
-        ENGINE["kagent-engine<br/>Agent Runtime"]
-        KMCP["kagent-kmcp-manager<br/>MCP Controller"]
-        
-        AGENTS["17 Agent Pods<br/>k8s, helm, istio, etc."]
-        TOOLS["Tool Servers<br/>grafana-mcp, querydoc"]
-        
-        UI --> CTRL
-        CTRL --> ENGINE
-        ENGINE --> AGENTS
-        KMCP --> TOOLS
-        AGENTS --> TOOLS
-    end
-    
-    subgraph "Model Configs"
-        MC1["ollama-phi3<br/>Ollama Provider"]
-        MC2["vllm-phi3<br/>OpenAI Provider"]
-        MC3["anthropic-claude<br/>Anthropic Provider"]
-    end
-    
-    subgraph "External Services"
-        OLLAMA["Ollama Pod<br/>ollama namespace"]
-        VLLM["vLLM Server<br/>Host: 192.168.1.130:8000"]
-        ANTHROPIC["Anthropic API<br/>claude.ai"]
-    end
-    
-    AGENTS --> MC1 --> OLLAMA
-    AGENTS --> MC2 --> VLLM
-    AGENTS --> MC3 --> ANTHROPIC
-```
-
-**Key Components:**
-- **kagent-controller**: Reconciles Agent, ModelConfig, ToolServer CRDs
-- **kagent-engine**: Executes agent logic, manages tool calls
-- **kagent-ui**: Web dashboard for agent management
-- **kagent-kmcp-manager**: MCP (Model Context Protocol) server lifecycle
-- **Built-in agents**: 17 pre-configured agents for k8s operations
-
-### 2. Model Serving (KServe + vLLM)
-
-```mermaid
-graph LR
-    subgraph "Client Layer"
-        API_CLIENTS["API Clients<br/>curl, SDKs"]
-    end
-    
-    subgraph "KServe Namespace"
-        KSERVE_CTRL["kserve-controller<br/>InferenceService Reconciler"]
-        KSERVE_LOCAL["kserve-localmodel-controller<br/>Local Model Management"]
-    end
-    
-    subgraph "Knative Serving"
-        ACTIVATOR["activator<br/>Scale-from-zero"]
-        AUTOSCALER["autoscaler<br/>Request-based HPA"]
-        CONTROLLER["controller<br/>Revision management"]
-    end
-    
-    subgraph "Inference Backends"
-        VLLM["vLLM Server<br/>Phi-3 Mini Q4<br/>8 tok/s"]
-    end
-    
-    API_CLIENTS --> KSERVE_CTRL
-    KSERVE_CTRL --> ACTIVATOR
-    ACTIVATOR --> AUTOSCALER
-    AUTOSCALER --> VLLM
-    CONTROLLER --> VLLM
-```
-
-**vLLM Configuration:**
-```bash
-python3 -m llama_cpp.server \
-  --model /models/phi-3-mini-4k-instruct.Q4_K_M.gguf \
-  --host 0.0.0.0 \
-  --port 8000 \
-  --n_ctx 4096 \
-  --n_gpu_layers 0  # CPU-only
-```
-
-### 3. Observability (Langfuse)
+### 1. Observability (Langfuse)
 
 ```mermaid
 graph TB
@@ -297,7 +213,7 @@ graph TB
 5. Redis caches recent queries
 6. S3 stores large artifacts (datasets, fine-tuning data)
 
-### 4. Code Sandboxing (gVisor)
+### 2. Code Sandboxing (gVisor)
 
 ```mermaid
 graph TB
@@ -397,22 +313,25 @@ spec:
 
 ### Network Policies
 
-Currently: **Open** (all pods can communicate)
+Currently: **Open** (systemd services on host network, no firewall)
 
 Future considerations:
-- Restrict Ollama to kagent namespace only
+- Add firewall rules to restrict model endpoints to LiteLLM proxy only
 - Isolate Langfuse data plane from public access
-- Implement NetworkPolicies for zero-trust
+- Implement VPN for remote model access
 
 ### Secrets Management
 
+**LiteLLM API Keys (Environment variables):**
+```bash
+LITELLM_MASTER_KEY=sk-trotman-litellm-2026
+ANTHROPIC_API_KEY=sk-ant-api03-...
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
+```
+
+**Langfuse (Kubernetes secrets):**
 ```yaml
-kagent/anthropic-api-key:
-  apiKey: sk-ant-api03-...
-
-kagent/vllm-api-key:
-  VLLM_API_KEY: not-needed
-
 langfuse/langfuse-secrets:
   NEXTAUTH_SECRET: <auto-generated>
   SALT: <auto-generated>
@@ -427,19 +346,30 @@ langfuse/langfuse-secrets:
 | k8s-control | ~2 cores (12.5%) | ~18GB (28%) | 35 |
 | k8s-worker | ~1 core (6.25%) | ~12GB (18%) | 17 |
 
-### vLLM Performance (Phi-3 Mini Q4 on Xeon E5-2690)
+### llama.cpp Performance (on Xeon E5-2667 v2 @ 3.30GHz)
 
 ```
-Model: Phi-3 Mini 4K Instruct Q4
-Size: 2.3GB
-Context: 4096 tokens
-Quantization: Q4_K_M
+Small Models (8B-14B parameters):
+├─ First token latency: 100-300ms
+├─ Throughput: 12-18 tokens/sec
+├─ Memory footprint: 4-9GB
+└─ CPU threads: 8 (n_threads=8)
 
-Metrics:
-├─ First token latency: 800ms
-├─ Throughput: ~8 tokens/sec
-├─ Memory footprint: ~4GB
-└─ CPU utilization: 100% (1 core)
+Medium Models (32B parameters):
+├─ First token latency: 400-600ms
+├─ Throughput: 8-12 tokens/sec
+├─ Memory footprint: ~19GB
+└─ CPU threads: 8
+
+Large Models (70B+ parameters):
+├─ First token latency: 1-2 seconds
+├─ Throughput: 6-10 tokens/sec
+├─ Memory footprint: 40-87GB
+└─ CPU threads: 16 (n_threads=16)
+
+Quantization: Q4_K_M (4-bit mixed precision)
+Context window: 2048-4096 tokens
+Runtime: llama.cpp-python with systemd
 ```
 
 ### Langfuse Data Volume
@@ -463,19 +393,20 @@ Production estimate: ~10K traces/day
 **Current:** Single replica for all services
 
 **Future:** Scale-out targets
-- vLLM: Add replicas on k8s-worker (load-balanced)
-- Ollama: Add model-specific deployments (llama3, mistral, etc.)
+- llama.cpp: Multiple model instances on different ports (already deployed)
+- LiteLLM: Add load balancing across multiple endpoints
 - Langfuse workers: 3-5 replicas for async processing
 - ClickHouse: Add shard 1 for >100K traces/day
 
 ### Vertical Scaling
 
-**Current:** Fixed VM resources (64GB/16vCPU)
+**Implemented:**
+- ✅ Worker VM expanded to 256GB RAM (from 62GB)
+- ✅ Distributed models across control (62GB) and worker (256GB) nodes
 
-**Options:**
-- Increase VM RAM to 128GB (3650 M4 has capacity)
-- Increase worker VM to 256GB (3550 M4 has capacity)
-- Reduce control plane workloads (offload to worker)
+**Future Options:**
+- Expand control VM to 100GB (ESXi host has 55GB free)
+- Add more CPUs if CPU becomes bottleneck
 
 ### GPU Acceleration
 
@@ -522,24 +453,25 @@ rsync -av /models/ backup-server:/models-backup/
 ### Available Metrics
 
 - Langfuse UI: Trace latency, token usage, cost
-- Kagent UI: Agent execution logs
-- kubectl top: CPU/memory per pod
-- vLLM: OpenAI-compatible `/metrics` endpoint
+- LiteLLM: Request logs, routing decisions, failover events
+- systemd journald: Model service logs, startup/restart events
+- Custom dashboard: scripts/deployment-status.sh (live deployment monitoring)
 
 ### Future Integration
 
 ```
 Prometheus → Grafana
 ├─ Node metrics (node-exporter)
-├─ Pod metrics (kubelet cAdvisor)
-├─ vLLM metrics (/metrics endpoint)
+├─ llama.cpp model metrics (systemd status, memory usage)
+├─ LiteLLM metrics (requests/sec, latency, model selection)
 └─ Langfuse metrics (custom exporter)
 
 Alerting:
-├─ vLLM down (>5min)
+├─ llama.cpp service down (>5min)
+├─ LiteLLM proxy unreachable
+├─ Model OOM events (systemd journal)
 ├─ Langfuse PostgreSQL storage >80%
-├─ Node CPU >90% (sustained)
-└─ Pod OOMKilled events
+└─ Node CPU >90% (sustained)
 ```
 
 ## Cost Analysis
@@ -583,12 +515,14 @@ Alerting:
 - **Built-in components:** Traefik, local-path-provisioner, CoreDNS
 - **Production-ready:** CNCF certified Kubernetes distribution
 
-### Why vLLM over llama.cpp?
+### Why llama.cpp over vLLM?
 
-- **Performance:** 2-3x faster on CPU (PagedAttention, continuous batching)
-- **OpenAI API:** Drop-in replacement for OpenAI SDK
-- **Scalability:** Supports distributed inference (future GPU)
-- **Ecosystem:** Native KServe integration
+- **CPU support:** vLLM doesn't support Linux CPU inference (GPU/macOS only)
+- **Stability:** Mature, battle-tested C++ codebase vs experimental Python
+- **Memory efficiency:** GGUF quantization (Q4_K_M) reduces 70B models to 40GB
+- **Simplicity:** Single binary, no complex dependencies or orchestration needed
+- **OpenAI API:** llama.cpp-python provides compatible REST API via `-m llama_cpp.server`
+- **Production ready:** Systemd services for reliability, no k8s complexity
 
 ### Why Langfuse over LangSmith?
 
@@ -597,23 +531,26 @@ Alerting:
 - **Open source:** MIT license, active community
 - **Framework-agnostic:** Works with any LLM framework
 
-### Why Kagent over custom agents?
+### Why LiteLLM for orchestration?
 
-- **Kubernetes-native:** CRDs, RBAC, declarative manifests
-- **Multi-provider:** Ollama, vLLM, Anthropic in single platform
-- **MCP support:** Integrates with Model Context Protocol servers
-- **CNCF project:** Accepted to CNCF Sandbox (May 2025)
+- **Unified API:** Single OpenAI-compatible endpoint for 15 different models
+- **Multi-provider:** Routes to local llama.cpp, cloud APIs (Claude, GPT-4o, Gemini)
+- **Smart routing:** Model groups (small/medium/large) for automatic selection
+- **Load balancing:** Round-robin across multiple endpoints
+- **Failover:** Automatic fallback to cloud if local models unavailable
+- **Zero complexity:** Python proxy, no Kubernetes operators or CRDs needed
 
 ## Future Architecture Evolution
 
 ### Phase 2: GPU Acceleration (Q3 2026)
 
 ```
-Add: NVIDIA Tesla P40 (12GB VRAM)
+Add: NVIDIA GPU (T4 or RTX 4090)
 ├─ ESXi GPU passthrough to k8s-worker VM
-├─ vLLM with CUDA support
-├─ Expected: 40-60 tok/s (5-7x improvement)
-└─ Larger models: Llama 3 70B (quantized to FP8)
+├─ vLLM with CUDA support (GPU workloads only)
+├─ Expected: 40-80 tok/s (4-8x improvement over CPU)
+├─ Larger models: Llama 3.1 70B full precision
+└─ Keep llama.cpp for CPU fallback/redundancy
 ```
 
 ### Phase 3: Multi-Cluster (Q4 2026)
