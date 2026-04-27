@@ -39,19 +39,15 @@ spec:
         - containerPort: 8080
           name: http
         env:
-        # Connect to local Ollama
-        - name: OLLAMA_BASE_URL
-          value: "http://ollama.ollama.svc.cluster.local:11434"
-
-        # Enable OpenAI-compatible API (for vLLM)
+        # Enable OpenAI-compatible API (for LiteLLM)
         - name: OPENAI_API_BASE_URLS
-          value: "http://192.168.1.130:8000/v1"
+          value: "http://192.168.1.130:4000/v1"
         - name: OPENAI_API_KEYS
-          value: "not-needed"
+          value: "sk-trotman-litellm-2026"
 
         # Optional: Set default model
         - name: DEFAULT_MODELS
-          value: "microsoft/Phi-3-mini-4k-instruct"
+          value: "hermes-2-pro-8b"
 
         # Data directory
         - name: DATA_DIR

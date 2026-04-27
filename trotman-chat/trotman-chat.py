@@ -1,16 +1,244 @@
 #!/usr/bin/env python3
 """
-Trotman Chat - Simple CLI for chatting with local LLMs.
+Trotman Chat - Claude Code-like CLI for your local LLMs with tool execution.
 """
 
 import argparse
 import sys
 import os
+import subprocess
+import json
+from pathlib import Path
 from datetime import datetime
 
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
+
+
+# ============================================================================
+# Tool Definitions
+# ============================================================================
+
+@tool
+def execute_kubectl(command: str) -> str:
+    """
+    Execute kubectl commands to interact with Kubernetes cluster.
+
+    Args:
+        command: The kubectl command to run (without 'kubectl' prefix).
+                 Example: "get pods -n kagent" or "describe pod my-pod"
+
+    Returns:
+        Command output or error message.
+    """
+    try:
+        full_command = f"kubectl {command}"
+        result = subprocess.run(
+            full_command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode == 0:
+            return result.stdout if result.stdout else "Command executed successfully (no output)"
+        else:
+            return f"Error: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Error: Command timed out after 30 seconds"
+    except Exception as e:
+        return f"Error executing kubectl: {str(e)}"
+
+
+@tool
+def execute_helm(command: str) -> str:
+    """
+    Execute helm commands to manage Helm charts.
+
+    Args:
+        command: The helm command to run (without 'helm' prefix).
+                 Example: "list -A" or "status kagent -n kagent"
+
+    Returns:
+        Command output or error message.
+    """
+    try:
+        full_command = f"helm {command}"
+        result = subprocess.run(
+            full_command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode == 0:
+            return result.stdout if result.stdout else "Command executed successfully (no output)"
+        else:
+            return f"Error: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Error: Command timed out after 30 seconds"
+    except Exception as e:
+        return f"Error executing helm: {str(e)}"
+
+
+@tool
+def read_file(file_path: str) -> str:
+    """
+    Read the contents of a file.
+
+    Args:
+        file_path: Absolute or relative path to the file.
+
+    Returns:
+        File contents or error message.
+    """
+    try:
+        path = Path(file_path).expanduser()
+        with open(path, 'r') as f:
+            content = f.read()
+        return content
+    except FileNotFoundError:
+        return f"Error: File not found: {file_path}"
+    except PermissionError:
+        return f"Error: Permission denied: {file_path}"
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+
+
+@tool
+def write_file(file_path: str, content: str) -> str:
+    """
+    Write content to a file. Creates parent directories if needed.
+
+    Args:
+        file_path: Absolute or relative path to the file.
+        content: Content to write to the file.
+
+    Returns:
+        Success message or error message.
+    """
+    try:
+        path = Path(file_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return f"Successfully wrote to {file_path}"
+    except PermissionError:
+        return f"Error: Permission denied: {file_path}"
+    except Exception as e:
+        return f"Error writing file: {str(e)}"
+
+
+@tool
+def list_directory(directory: str = ".") -> str:
+    """
+    List files and directories in the specified path.
+
+    Args:
+        directory: Path to list (default: current directory).
+
+    Returns:
+        Directory listing or error message.
+    """
+    try:
+        path = Path(directory).expanduser()
+        if not path.exists():
+            return f"Error: Directory not found: {directory}"
+
+        if not path.is_dir():
+            return f"Error: Not a directory: {directory}"
+
+        items = []
+        for item in sorted(path.iterdir()):
+            if item.is_dir():
+                items.append(f"📁 {item.name}/")
+            else:
+                size = item.stat().st_size
+                items.append(f"📄 {item.name} ({size} bytes)")
+
+        return "\n".join(items) if items else "Empty directory"
+    except PermissionError:
+        return f"Error: Permission denied: {directory}"
+    except Exception as e:
+        return f"Error listing directory: {str(e)}"
+
+
+@tool
+def execute_shell(command: str) -> str:
+    """
+    Execute a shell command. Use with caution!
+
+    Args:
+        command: Shell command to execute.
+
+    Returns:
+        Command output or error message.
+    """
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        output = result.stdout if result.stdout else ""
+        error = result.stderr if result.stderr else ""
+
+        if result.returncode == 0:
+            return output if output else "Command executed successfully (no output)"
+        else:
+            return f"Exit code {result.returncode}\n{error}\n{output}"
+    except subprocess.TimeoutExpired:
+        return "Error: Command timed out after 30 seconds"
+    except Exception as e:
+        return f"Error executing shell command: {str(e)}"
+
+
+@tool
+def get_cluster_info() -> str:
+    """
+    Get comprehensive Kubernetes cluster information.
+
+    Returns:
+        Cluster status, nodes, and resource summary.
+    """
+    try:
+        # Get cluster info
+        cluster_info = subprocess.run(
+            "kubectl cluster-info",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        ).stdout
+
+        # Get nodes
+        nodes = subprocess.run(
+            "kubectl get nodes -o wide",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        ).stdout
+
+        # Get namespaces
+        namespaces = subprocess.run(
+            "kubectl get namespaces",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        ).stdout
+
+        return f"=== Cluster Info ===\n{cluster_info}\n\n=== Nodes ===\n{nodes}\n\n=== Namespaces ===\n{namespaces}"
+    except Exception as e:
+        return f"Error getting cluster info: {str(e)}"
 
 
 # ============================================================================
@@ -21,41 +249,17 @@ def create_chat_model(provider: str, model: str = None, temperature: float = 0.7
     """Create LangChain chat model based on provider."""
     if provider == "vllm":
         return ChatOpenAI(
-            base_url="http://192.168.1.130:8000/v1",
-            api_key="not-needed",
-            model=model or "microsoft/Phi-3-mini-4k-instruct",
+            base_url="http://192.168.1.130:4000/v1",
+            api_key="sk-trotman-litellm-2026",
+            model=model or "hermes-2-pro-8b",
             temperature=temperature,
             streaming=True,
         )
     elif provider == "ollama":
         return ChatOllama(
-            base_url="http://192.168.1.130:30434",
+            base_url="http://ollama.ollama.svc.cluster.local:11434",
             model=model or "phi3",
             temperature=temperature,
-        )
-    elif provider == "llama":
-        # Llama 3.1 with function calling support
-        return ChatOllama(
-            base_url="http://192.168.1.130:30434",
-            model=model or "llama3.1:8b",
-            temperature=temperature,
-            format="json",  # Enable structured output
-        )
-    elif provider == "mistral":
-        # Mistral with function calling support
-        return ChatOllama(
-            base_url="http://192.168.1.130:30434",
-            model=model or "mistral:7b",
-            temperature=temperature,
-            format="json",
-        )
-    elif provider == "hermes":
-        # Hermes 3 with function calling support
-        return ChatOllama(
-            base_url="http://192.168.1.130:30434",
-            model=model or "hermes3:8b",
-            temperature=temperature,
-            format="json",
         )
     elif provider == "anthropic":
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -100,8 +304,7 @@ You have access to a Kubernetes cluster with the following components:
 - k3s cluster with control plane and worker node
 - Kagent (agent orchestration)
 - KServe (model serving)
-- vLLM inference server
-- Ollama (local models)
+- llama.cpp inference via LiteLLM
 - Langfuse (observability)
 - Knative Serving
 - cert-manager
@@ -238,9 +441,9 @@ def main():
     parser.add_argument(
         "--provider",
         "-p",
-        choices=["vllm", "ollama", "llama", "mistral", "hermes", "anthropic"],
-        default="llama",
-        help="Model provider (default: llama)"
+        choices=["vllm", "ollama", "anthropic"],
+        default="vllm",
+        help="Model provider (default: vllm)"
     )
     parser.add_argument(
         "--model",
@@ -266,11 +469,8 @@ def main():
     try:
         chat_model = create_chat_model(args.provider, args.model, args.temperature)
         provider_name = {
-            "vllm": "vLLM (Phi-3 Mini)",
+            "vllm": "LiteLLM (Hermes 2 Pro 8B)",
             "ollama": "Ollama (phi3)",
-            "llama": "Llama 3.1 8B (Function Calling)",
-            "mistral": "Mistral 7B (Function Calling)",
-            "hermes": "Hermes 3 8B (Function Calling)",
             "anthropic": "Anthropic (Claude Sonnet 4.5)"
         }[args.provider]
     except Exception as e:
