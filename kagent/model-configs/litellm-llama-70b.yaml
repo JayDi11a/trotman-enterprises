@@ -1,0 +1,12 @@
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: litellm-llama-70b
+  namespace: kagent
+spec:
+  provider: OpenAI
+  openAI:
+    baseUrl: http://192.168.1.130:4000/v1
+  model: llama-3.1-70b
+  apiKeySecret: litellm-api-key
+  apiKeySecretKey: LITELLM_API_KEY

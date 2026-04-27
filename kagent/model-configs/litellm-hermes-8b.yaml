@@ -1,0 +1,21 @@
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: litellm-hermes-8b
+  namespace: kagent
+spec:
+  provider: OpenAI
+  openAI:
+    baseUrl: http://192.168.1.130:4000/v1
+  model: hermes-2-pro-8b
+  apiKeySecret: litellm-api-key
+  apiKeySecretKey: LITELLM_API_KEY
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-api-key
+  namespace: kagent
+type: Opaque
+stringData:
+  LITELLM_API_KEY: sk-trotman-litellm-2026
