@@ -8,6 +8,8 @@ import sys
 import os
 import subprocess
 import json
+import requests
+import re
 from pathlib import Path
 from datetime import datetime
 
@@ -241,6 +243,60 @@ def get_cluster_info() -> str:
         return f"Error getting cluster info: {str(e)}"
 
 
+@tool
+def query_papers(question: str, complexity: str = "intermediate") -> str:
+    """
+    Query Ilya Sutskever's top 30 AI/ML research papers using RAG.
+
+    Ask natural language questions about foundational AI/ML papers and get
+    AI-generated answers with source citations. Papers include transformers,
+    ResNets, LSTMs, scaling laws, and more.
+
+    Args:
+        question: Your question about the papers (e.g., "What are transformers?",
+                 "Explain residual connections", "How do LSTMs work?")
+        complexity: Response detail level - "beginner", "intermediate", "advanced",
+                   or "expert" (default: "intermediate")
+
+    Returns:
+        AI-generated answer with paper citations
+
+    Examples:
+        - "What is the transformer architecture?"
+        - "How do skip connections help deep networks?"
+        - "Explain scaling laws for language models"
+    """
+    try:
+        papers_api_url = "http://192.168.1.130:30092"
+        response = requests.post(
+            f"{papers_api_url}/query",
+            json={"question": question, "complexity": complexity},
+            timeout=60
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        answer = data.get("answer", "No answer generated")
+        sources = data.get("sources", [])
+
+        # Format with sources
+        if sources:
+            sources_text = "\n\n📚 Sources:\n"
+            for source in sources:
+                sources_text += f"• {source['title']}\n"
+                sources_text += f"  {source['authors']}\n"
+            return f"{answer}{sources_text}"
+        else:
+            return answer
+
+    except requests.exceptions.ConnectionError:
+        return "❌ Cannot connect to Papers API. Is the service running? (kubectl get svc -n research-papers)"
+    except requests.exceptions.Timeout:
+        return "❌ Request timed out. The question may be too complex."
+    except Exception as e:
+        return f"❌ Error querying papers: {str(e)}"
+
+
 # ============================================================================
 # Chat Client Setup
 # ============================================================================
@@ -251,9 +307,9 @@ def create_chat_model(provider: str, model: str = None, temperature: float = 0.7
         return ChatOpenAI(
             base_url="http://192.168.1.130:4000/v1",
             api_key="sk-trotman-litellm-2026",
-            model=model or "hermes-2-pro-8b",
+            model=model or "qwen2.5-14b",
             temperature=temperature,
-            streaming=True,
+            streaming=False,
         )
     elif provider == "ollama":
         return ChatOllama(
@@ -279,6 +335,53 @@ def create_chat_model(provider: str, model: str = None, temperature: float = 0.7
 
 
 # ============================================================================
+# Tool Call Parser for Text-Based Models
+# ============================================================================
+
+def parse_text_tool_calls(content: str):
+    """
+    Parse text-based tool calls from models that use <tool_call>...</tool_call> XML format
+    or raw JSON tool call format.
+
+    Returns list of dicts with 'name' and 'arguments' keys, or empty list if no tool calls found.
+    """
+    tool_calls = []
+
+    # Try XML format first: <tool_call>...</tool_call>
+    xml_pattern = r'<tool_call>\s*(\{.*?\})\s*</tool_call>'
+    xml_matches = re.findall(xml_pattern, content, re.DOTALL)
+
+    for match in xml_matches:
+        try:
+            tool_data = json.loads(match)
+            if 'name' in tool_data and 'arguments' in tool_data:
+                tool_calls.append({
+                    'name': tool_data['name'],
+                    'arguments': tool_data['arguments']
+                })
+        except json.JSONDecodeError:
+            continue
+
+    # If no XML format found, try raw JSON format
+    if not tool_calls:
+        # Look for {"name": "...", "arguments": {...}} pattern
+        json_pattern = r'\{"name":\s*"([^"]+)",\s*"arguments":\s*(\{[^}]*\})\}'
+        json_matches = re.findall(json_pattern, content, re.DOTALL)
+
+        for name, args_str in json_matches:
+            try:
+                arguments = json.loads(args_str)
+                tool_calls.append({
+                    'name': name,
+                    'arguments': arguments
+                })
+            except json.JSONDecodeError:
+                continue
+
+    return tool_calls
+
+
+# ============================================================================
 # Agent Setup
 # ============================================================================
 
@@ -292,10 +395,18 @@ def create_agent_executor(chat_model):
         list_directory,
         execute_shell,
         get_cluster_info,
+        query_papers,
     ]
 
     # Bind tools to the model
-    model_with_tools = chat_model.bind_tools(tools)
+    # TEMP: Tool binding disabled - causes hang with langchain + LiteLLM
+    # model_with_tools = chat_model.bind_tools(tools)
+    model_with_tools = chat_model  # No tools for now
+
+    # Build tool descriptions for system message
+    tools_description = "\n\nAvailable tools:\n"
+    for tool in tools:
+        tools_description += f"- {tool.name}: {tool.description}\n"
 
     # Store system message
     system_message = """You are Trotman Chat, an AI assistant running on the Trotman Enterprises ML Lab.
@@ -310,15 +421,28 @@ You have access to a Kubernetes cluster with the following components:
 - cert-manager
 - gVisor (code sandboxing)
 
+You also have access to Ilya Sutskever's top 30 AI/ML research papers via RAG.
+Use the query_papers tool when users ask about:
+- AI/ML concepts (transformers, attention, ResNets, LSTMs, etc.)
+- Research papers and their contributions
+- Deep learning fundamentals
+
 When users ask you to do something:
 1. Understand what they want
 2. Use the appropriate tools to accomplish it
 3. Explain what you're doing
 4. Show the results clearly
 
+To use a tool, respond with:
+<tool_call>
+{{"name": "tool_name", "arguments": {{"arg1": "value1", "arg2": "value2"}}}}
+</tool_call>
+
 Be helpful, concise, and technical. You're talking to someone who knows their way around Kubernetes and ML infrastructure.
 
-Current working directory: {cwd}""".format(cwd=os.getcwd())
+Current working directory: {cwd}
+
+{tools}""".format(cwd=os.getcwd(), tools=tools_description)
 
     return {
         "model": model_with_tools,
@@ -393,9 +517,9 @@ def chat_loop(agent_config, provider_name):
                 response = model.invoke(messages)
                 messages.append(response)
 
-                # Check if tools were called
+                # Check if tools were called (OpenAI format)
                 if hasattr(response, 'tool_calls') and response.tool_calls:
-                    # Execute tools
+                    # Execute OpenAI-style tool calls
                     for tool_call in response.tool_calls:
                         tool_name = tool_call["name"]
                         tool_args = tool_call["args"]
@@ -412,8 +536,30 @@ def chat_loop(agent_config, provider_name):
                     messages.append(final_response)
                     print(final_response.content)
                 else:
-                    # No tools called, just print response
-                    print(response.content)
+                    # Check for text-based tool calls (e.g., <tool_call>...</tool_call>)
+                    text_tool_calls = parse_text_tool_calls(response.content)
+
+                    if text_tool_calls:
+                        # Execute text-based tool calls
+                        tool_results = []
+                        for tool_call in text_tool_calls:
+                            tool_name = tool_call["name"]
+                            tool_args = tool_call["arguments"]
+
+                            if tool_name in tools_dict:
+                                result = tools_dict[tool_name].invoke(tool_args)
+                                tool_results.append(f"\n**{tool_name} result:**\n{result}\n")
+
+                        # Add tool results to context and get final response
+                        tool_results_text = "\n".join(tool_results)
+                        messages.append(HumanMessage(content=f"Tool execution results:\n{tool_results_text}\n\nPlease provide a summary based on these results."))
+
+                        final_response = model.invoke(messages)
+                        messages.append(final_response)
+                        print(final_response.content)
+                    else:
+                        # No tools called, just print response
+                        print(response.content)
 
             except Exception as e:
                 print(f"\n❌ Error: {str(e)}")
@@ -469,7 +615,7 @@ def main():
     try:
         chat_model = create_chat_model(args.provider, args.model, args.temperature)
         provider_name = {
-            "vllm": "LiteLLM (Hermes 2 Pro 8B)",
+            "vllm": "LiteLLM (Command-R 35B)",
             "ollama": "Ollama (phi3)",
             "anthropic": "Anthropic (Claude Sonnet 4.5)"
         }[args.provider]
@@ -498,7 +644,7 @@ def main():
             # Get response
             response = model.invoke(messages)
 
-            # Check for tool calls
+            # Check for OpenAI-style tool calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 messages.append(response)
 
@@ -518,7 +664,30 @@ def main():
                 final_response = model.invoke(messages)
                 print(final_response.content)
             else:
-                print(response.content)
+                # Check for text-based tool calls
+                text_tool_calls = parse_text_tool_calls(response.content)
+
+                if text_tool_calls:
+                    messages.append(response)
+
+                    # Execute text-based tool calls
+                    tool_results = []
+                    for tool_call in text_tool_calls:
+                        tool_name = tool_call["name"]
+                        tool_args = tool_call["arguments"]
+
+                        if tool_name in tools_dict:
+                            result = tools_dict[tool_name].invoke(tool_args)
+                            tool_results.append(f"\n**{tool_name} result:**\n{result}\n")
+
+                    # Add tool results to context and get final response
+                    tool_results_text = "\n".join(tool_results)
+                    messages.append(HumanMessage(content=f"Tool execution results:\n{tool_results_text}\n\nPlease provide a summary based on these results."))
+
+                    final_response = model.invoke(messages)
+                    print(final_response.content)
+                else:
+                    print(response.content)
 
         except Exception as e:
             print(f"\n❌ Error: {str(e)}")
